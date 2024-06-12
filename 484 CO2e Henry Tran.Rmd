@@ -1,0 +1,257 @@
+---
+title: "CO2e for Final Paper: 484"
+author: "Henry Tran"
+date: "6/2/23"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+```{r Set-Up}
+library("glmnet")
+library(glmnet) #for ridge and lasso
+library(hdm) #lasso and double lasso
+library(tree) #regression tree
+library(caret) # to train datasets
+library(randomForest) #random forest
+library(grf) # bagging and random forest
+library(dplyr) #for %>% function
+
+aggregate <- read.csv("dataupdated.csv")
+
+#Thank you to my groupmate Ben for doing this. It is to include all data in which we can then omit NAs and use for our data
+data_1996 <- c("Cobalt.Price","Lithium.Price","Coal.Trade","Gas.Trade","Oil.Crude","OilProd.NGL")
+data_1995 <- c(data_1996, "Solar.Cap")
+data_1990 <- c(data_1995,"Cobalt.Prod","Lithium.Prod","Graphite.Prod","RareEarth.Prod","Wind.Cap")
+data_1987 <- c(data_1990,"BioFuel.Prod","BioFuel.Cons","Methane.CO2","Total.CO2e")
+data_1985 <- c(data_1987,"EUCoal.Price")
+data_1981 <- c(data_1985,"ElectGen.Total","ElectGen.Oil","ElectGen.Gas","ElectGen.Coal","ElectGen.Other")
+data_1980 <- c(data_1981,"Coal.ProdEj")
+data_1975 <- c(data_1980,"Oil.Reserves","Oil.RefineThrough","Oil.Trade","Gas.Res")
+data_1970 <- c(data_1975,"nGas.Flaring")
+data_1965 <- c(data_1970,"GasProd.Bcm")
+
+#want to determine if we are on track for carbon neutrality by 2050/quarter of carbon emissions since 2018. y is total.CO2e
+
+#Remove any variables that has high correlation/no correlation with Total.CO2e to lower level of confounding
+x <- as.matrix(aggregate[, !colnames(aggregate) %in% c(data_1965,"Energy.CO2","Methane.CO2","pcEnergy.Cons")])
+#Makes x dimension compliant with y dimension. Cuts off data from 1990-2021
+x <- x[26:57, ]
+x <- na.omit(x)
+# x
+
+#Assigning y to be Total.CO2e which will be explained by all variables under x
+y <- as.matrix(aggregate$'Total.CO2e')
+y <- na.omit(y)
+# y
+grid <- 10^seq(10, -2, length=100)
+```
+
+
+```{r LASSO}
+#for reproduction
+set.seed(123)
+
+#Splitting data
+train <- sample(1:nrow(x), 0.7*nrow(x), replace = FALSE)
+
+#LASSO with cv
+lasso.mod <- glmnet(x[train,], y[train], alpha=1, lambda=grid)
+cv.out <- cv.glmnet(x[train,], y[train], alpha=1, nfolds=5)
+lasso.pred <- predict(lasso.mod, s=cv.out$lambda.min, newx = x[-train,])
+lasso.mse <- mean((lasso.pred - y[-train])^2)
+lasso.mse
+# MSE: 27682.14
+
+
+#Variable selection for linear regression
+out <- glmnet(x, y, alpha=1)
+lasso.coef <- predict(out, type="coefficients", s=cv.out$lambda.min)[1:17,]
+lasso.coef
+#Variables Lasso deems significant: Energy.Cons (Energy Consumption in Exajoules), OilProd.Barrels (in Barrels), OilProd.Tonnes (in Tonnes), 
+#TotalLiq.Cons (Oil: Total Liquids Consumption - Barrels), OilTonnes.Cons (Oil Consumption in Tonnes), Coal.ConsEj (Coal Consumption in Exajoules)
+```
+```{r double lasso}
+options(scipen=999)
+set.seed(123)
+
+double.lasso <- rlassoEffects(x, y, index = names(lasso.coef[lasso.coef != 0])[-1], method = "double selection")
+summary(double.lasso)
+#With the four variables excluded, Coal.ConsEJ is deemed significant after Double Lasso
+#An increase in Coal Consumption globally increases Total CO2 emissions globally
+
+# Get the selected predictors and coefficients
+selected_pred <- names(lasso.coef[lasso.coef != 0])[-1]
+x_selected <- x[, selected_pred]
+coefficients <- coef(double.lasso)
+
+# Make predictions using the selected predictors
+predictions <- as.matrix(x_selected) %*% coefficients
+
+# double lasso mse: 133422484
+mse.double <- mean((predictions - y)^2)
+mse.double
+```
+
+```{r lin.reg}
+
+reg <- lm(aggregate$Total.CO2e~aggregate$Energy.Cons+aggregate$OilProd.Tonnes+aggregate$TotalLiq.Cons+aggregate$OilTonnes.Cons)
+summary(reg)
+# mse 165958.4
+
+predicted <- predict(reg)
+residuals <- y - predicted
+squared_residuals <- residuals^2
+mse.reg <- mean(squared_residuals)
+mse.reg
+```
+
+```{r reg. tree}
+#the tree appears to be small. don't need to prune
+tree.global <- tree(y ~ ., data = as.data.frame(x))
+summary(tree.global)
+plot(tree.global)
+text(tree.global)
+
+#MSE 987247.2
+y2hat_unpruned <- predict(tree.global, newdata = as.data.frame(x[-train, ]))
+mean((y2hat_unpruned - y[-train])^2)
+```
+
+```{r ridge reg.}
+## Split data into training & test sets to estimate the test error
+set.seed(123)
+train.ridge <- sample(1:nrow(x), 0.7*nrow(x), replace = FALSE)  # half training, half test
+x.testridge <- x[-train.ridge,]
+y.testridge <- y[-train.ridge]
+
+
+ridge <- glmnet(x[train.ridge,], y[train.ridge], alpha=0)
+
+##cv for lambda (best is 638.6588)
+ridgecv.out <- cv.glmnet(x[train.ridge,], y[train.ridge], alpha=0)
+# plot(cv.out)
+bestlam <- ridgecv.out$lambda.min
+#bestlam
+
+# test MSE is 5598307
+ridge.pred <- predict(ridge, s=bestlam, newx=x.testridge)
+mean((ridge.pred - y.testridge)^2)
+
+```
+
+
+```{r rf and bagging}
+set.seed(123)
+
+#random forest
+#oob: 4449799
+rf_model <- regression_forest(x, y, mtry = 6)
+mean(rf_model$debiased.error)
+
+# bagging
+#oob 4719927
+bag_model <- regression_forest(x, y, mtry = 39)
+mean(bag_model$debiased.error)
+```
+
+```{r lasso modeling}
+#Model based on LASSO significant coefficients
+
+#Select variables
+vars <- as.matrix(coef(cv.out, s = "lambda.min")[-1, , drop=FALSE])
+vars <- rownames(vars)[vars[, 1] != 0]
+
+modeldata <- aggregate[26:57, vars]
+
+#adds year column
+num_rows <- nrow(modeldata) #32 rows
+years <- seq(1990, length.out = num_rows, by = 1)
+
+# Add the 'Year' column to the existing dataframe
+modeldata <- modeldata %>%
+  mutate(Year = years) %>%
+  select(Year, everything())
+
+#check for compliant matrix dimensions
+dim(y)
+dim(modeldata)
+
+#Generate model
+model <- lm(y ~ ., data = modeldata)
+
+#Create predictions from 2022 to 2050
+predictions_df <- data.frame(Year = c(2022:2050))
+for (var in vars) {
+  if (var != "Year") {
+    p_value <- summary(lm(get(var) ~ Year + I(Year^2), data = aggregate))$coefficients[3, 4]
+    
+    if (p_value > 0.05) {
+      forecast <- lm(get(var) ~ Year, data = modeldata)
+      predictions <- predict(forecast, newdata = predictions_df)
+    } else {
+      forecast <- lm(get(var) ~ Year + I(Year^2), data = modeldata)
+      predictions <- predict(forecast, newdata = predictions_df)
+    }
+    
+    predictions_df[[var]] <- predictions
+  }
+}
+
+#Predict outcome variable (with no solution)
+predictions_df$pred_y <- predict(model, newdata = predictions_df)
+predictions_df$Total.CO2e <- predictions_df$pred_y
+predictions_df$Total.Co2e
+
+#Generates graph
+tempdf <- predictions_df[, -which(names(predictions_df) == "pred_y")]
+combined_df <- rbind(aggregate[, c(vars, "Year", "Total.CO2e")], tempdf)
+combined_df <- na.omit(combined_df)
+
+new_points <- data.frame(Year = c(2024, 2025, 2030, 2050), Total.CO2e = c(42004.28, 42538.04, 31267.69, 0))
+
+plot(combined_df$Year, combined_df$Total.CO2e, type = "n", xlab = "Year", ylab = "Yearly  CO2 Emissions", main="CO2 Emissions with Predictions After 2021 (1990-2050)", ylim = c(0, max(combined_df$Total.CO2e) * 1.1))
+lines(combined_df$Year, combined_df$Total.CO2e, col = "red", lwd=3, lty = 3)
+lines(combined_df$Year[combined_df$Year < 2022], combined_df$Total.CO2e[combined_df$Year < 2022], col = "black", lwd=3)
+
+lines(new_points$Year, new_points$Total.CO2e, col = "green", lwd = 3, lty = 2)
+
+legend("topleft", legend = "Forecasted CO2 Emissions by 2050", col = "red", lwd = 3, lty = 3)
+
+legend("bottomleft", legend = "Carbon Neutrality by 2050", col = "green", lwd = 3, lty = 3)
+
+## 43% CO2e by 2030 after peaking by 2025? Neutrality by 2050?
+## look at 2025
+## take 43% of that, and explain if possible
+print(combined_df[61 ,])
+#Carbon Emissions 2025 = 54855.6
+co2e.2025 <- 54855.6
+0.57*co2e.2025
+
+"We must be at 31,227.69 million Tonnes of CO2 by 2030, with a downward trend. This figure is almost similar to total CO2 emissions in the year 2010."
+
+co2e.2023 <- 41467.36
+co2e.2030 <- 31227.7
+
+percent_change <- ((co2e.2030 - co2e.2023) / co2e.2023) * 100
+
+percent_change
+
+"This would be a 24.7% reduction in CO2 emissions to avoid the 1.5 degree Celisus mark at 2030 from projected 2023 CO2 emissions by the end of this year."
+
+co2yearonly <- combined_df[, c("Year", "Total.CO2e")]
+
+co2_emissions <- c(40927.28, 41467.36, 42004.28, 42538.04, 43068.64, 43596.08, 44120.36, 44641.49, 45159.46, 45674.27, 46185.92, 46694.41, 47199.75, 47701.93, 48200.95, 48696.81, 49189.51, 49679.05, 50165.44, 50648.67, 51128.74, 51605.65, 52079.40, 52550.00, 53017.43, 53481.71, 53942.83, 54400.79, 54855.60)
+
+percentage_changes <- (co2_emissions[-1] - co2_emissions[-length(co2_emissions)]) / co2_emissions[-length(co2_emissions)] * 100
+
+average_percentage_change <- mean(percentage_changes)
+
+average_percentage_change
+
+"Mean percent change in Total CO2 emissions per year after 2022 is around 1.05170%."
+
+```
+

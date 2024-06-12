@@ -1,0 +1,157 @@
+---
+title: "Lab 1 484 Henry Tran"
+author: "Henry Tran"
+date: "4/5/2023"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+
+2.1a-d
+"a. Low number of regressor, large sample size. Because there are a low number of regressors, an inflexible method would work best, but since there’s a large sample size, a linear regression for example could misrepresent the true data set (the population may be quadratic). For A, I would say that flexible statistical learning methods would generally perform better because there are enough observations for a flexible method to work (sparsity problem won’t apply here)."
+
+"b. A lot of regressors would imply that a flexible statistical learning method would perform better, but a flexible method requires a large number of observations. For B, I’d say that inflexible methods would perform better. For example, a linear regression could use alot of regressors for a small sample size to extrapolate those results."
+
+"c. Flexible statistical learning methods would perform better because the response being non-linear implies that they are of a higher dimension and inflexible, linear based statistical learning models would not fair well."
+
+"d. When Variance is very high, by the bias-variance tradeoff, bias is very low and is very flexible, and an inflexible statistical method would fare better than a flexible one because of that."
+
+2.4.a
+
+"a. When determining someone’s underlying health condition when they reach the front desk of an urgent care. The response here would be if they would require an x-ray or not. Some predictors could be their underlying symptoms, if they white blood cell count is up to par, or if they asked for it. This would be for inference."
+
+"b. When determining if someone will be a big spender or not. The response would be the amount of money they spend in the store. Some predictors could be their zip code, annual income, and net worth. The goal of this would be for prediction."
+
+"Classification could be useful in determining whether an email is considered spam email or not. The response would be if the email were a spam email or not. Some predictors could be if the sender is using a trusted email service (Google, Yahoo), if there is a subject line, if the contents of the email have consistent grammar. This would be used for prediction."
+
+2.4.b
+
+"i. Regression could be useful for predicting whether eating Mcdonald's has an effect on weight gain. The response would be if your weight had increased or not. Some predictions could be what you order, your underlying health conditions, and if you are overweight or not (by the BMI). This would be for prediction."
+
+"ii. Regression could also be useful for determining whether someone has diabetes or not from a set of collected data. The predictors could be whether they have a history of diabetes in the family if they use an Epi-pen, or if they ate a lot of candy as a kid. This would be for inference."
+
+"iii. Lastly, regression could also be useful for predicting if crime rates change if policing increases or decreases in certain communities. Response would be crime rates increasing. Predictors would be the demographic of the neighborhoods, how much funding there is for schooling and social services, and the population density. This would be used for prediction."
+
+2.4.c
+
+"i. Clustering customers by age group to boost product sales."
+
+"ii. Clustering DNA mutations to determine which group of mutations lead to certain diseases."
+
+"iii. Clustering TV watchers by their TV show preferences to better guage the TV show they’ll watch next."
+
+```{r college 2.8}
+college <- read.csv("College.csv")
+rownames(college) <- college[, 1]
+#View(college)
+college <- college [, -1]
+#View(college)
+
+#c.i
+summary(college)
+
+#c.ii
+pairs(college[,2:10], cex = .1)
+
+#c.iii
+boxplot(college$Outstate ~ college$Private, xlab = "Private", ylab = "Outstate")
+
+#c.iv
+Elite <- rep("no", nrow(college))
+Elite[college$Top10perc > 50] <- "Yes"
+Elite <- as.factor(Elite)
+college <- data.frame(college, Elite)
+summary(college)
+
+"There are 78 elite colleges."
+```
+
+```{r 2.8.c}
+#2.8.c.v
+par(mfrow = c(2,2))
+hist(college$Outstate, breaks = 5, xlab = "Top 10 Percent")
+hist(college$PhD, breaks = 10, xlab = "Number of PHDs") 
+hist(college$Grad.Rate, breaks = 20, xlab = "Graduation Rate") 
+hist(college$S.F.Ratio, breaks = 50, xlab = "Student Faculty Ratio") 
+
+```
+
+2.8.c.vi
+
+For the first histogram on the left, it appears to be somewhat normal. It appears from the histogram that colleges across the US, on average, took in between 5000 and 10000 out of state students in the year 1995.
+
+For the second histogram, the distribution appears to be left-skewed. The histogram displays that colleges across the US in the year 1995, on average, had around 70-80 PHD students.
+
+For the third histogram, it appears to be uniformally normal. For the 1995 year, the histogram shows that the median graduation rate for colleges across the US was around 65-70%.
+
+For the last histogram, it appears somewhat normally distributed. The histogram shows that the average student-faculty ratio in colleges across the US for the year 1995 was around 15-20 students per professor.
+
+
+```{r Boston 2.10}
+library(ISLR2)
+#2a
+?Boston
+summary(Boston)
+"There are 506 rows and 13 columns. The rows represent observations (as house numbers) and the columns represent the different variables that each observation has data on."
+```
+
+```{r Boston2.10.b}
+
+library(tidyverse)
+library(ggplot2)
+ggplot(Boston, aes(x= nox, y= rad)) + geom_point()
+ggplot(Boston, aes(x = tax, y = rm)) + geom_point()
+
+"It appears that for the rad by nox scatterplot, the more accessible a house is to a radial highway, the lower the NO2 PPM there is. There are also some observations that show that the further you are from radial highways, the higher the NO2 PPM there are (the observations towards the top). There is an outlier towards the right of the plot."
+
+"As for the tax vs. rm plot, there doesn't appear to be a trend for the full-value property tax rate and the average number of rooms per dwelling for the observations between 200 and 450 per $10,000. However, towards the right of the plot, houses with a property tax rate of around 660 per $10,000 appear to be concentrated around 6 rooms per dwelling, on average."
+```
+
+```{r 2.10.c}
+cor(Boston$crim, Boston[-1])
+max(cor(Boston$crim, Boston[-1]))
+"The accessibility to radial highways and crime per capita appear to have the highest correlation value at 0.6255."
+```
+
+```{r 2.10.d}
+range(Boston$crim)
+"The range seems to be very large. It comes out to a 88.969 difference in per capita crime rate across all suburbs in Boston."
+range(Boston$tax)
+"The range for the tax rate seems relatively large as well, with a difference of 523 in the full-value property-tax rate per $10,000."
+range(Boston$ptratio)
+"The teacher to pupil ratio seems smaller in relation to the other ranges, with a difference of about 8 students per teacher across all suburbs in Boston."
+```
+
+```{r 2.10.e}
+Boston %>% count(chas)
+"There are 35 census tracts that bound the Charles river."
+```
+
+```{r 2.10.f}
+median(Boston$ptratio)
+"The median pupil-teacher ratio among the towns is 19.05."
+```
+
+```{r 2.10.g}
+Boston %>% count(rm >=7)
+"There are 64 census tracts that average 7 or more rooms per dwelling."
+Boston %>% count(rm >=8)
+
+#for these, I had wanted to choose the observations where rm > 8 instead of having to type each observation in. I tried doing that with the code below but wasn't successful.
+mean(Boston$age)
+mean((31.9 + 86.5 + 76 + 70.4 + 8.4 + 78.3 + 93.9 + 91.5 + 86.9 + 83 + 82.9)/13) # < 13 census tracts
+
+median(Boston$age)
+median(31.9, 86.5, 76, 70.4, 8.4, 78.3, 93.9, 91.5, 86.9, 83, 82.9) # < 13 census tracts
+
+median(Boston$medv)
+median(50, 37.6, 38.7, 48.3, 42.8, 44.8, 50, 41.7, 50, 48.8, 50, 50, 21.9) # < 13 census tracts
+#df <- Boston
+#mean(df(Boston$age == rm>=7))
+#mean(df(Boston$rm > 8, Boston$age)) want to take average age of rm>8 to show that it's alot > mean(Boston$rm)
+
+"For the 13 census tracts that average 8 or more rooms per dwelling, they appear to have a lower average age of around 60.75 years vs. the 68.58 year average across all suburbs in Boston. The median age for Bostonians comes out to around 77.5 years of age vs. the 31.9 years of age from the 13 census tracts where the rooms of dwelling are greater than 8. The median value for the owner-occoupied homes by $1000s for the census tracts came out to be $50000, whereas the median value for owner-ocupied homes by $1000s across the 506 suburbs in Boston came out to be $21200."
+```
